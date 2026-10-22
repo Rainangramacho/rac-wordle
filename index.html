@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nosso Termo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { poppins: ['Poppins', 'sans-serif'] },
+                    colors: {
+                        brand: { gold: '#fbbf24', pink: '#db2777' },
+                        correct: '#10b981', /* Verde */
+                        present: '#f59e0b', /* Amarelo */
+                        absent: '#4b5563'   /* Cinza */
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #4c1d95, #9d174d, #db2777);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* Grid do Jogo */
+        .board {
+            display: grid;
+            gap: 6px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        .tile {
+            width: 100%;
+            aspect-ratio: 1/1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            border: 2px solid rgba(255, 255, 255, 0.1); /* Borda padrão bem transparente */
+            border-radius: 8px;
+            color: white;
+            background: transparent;
+            transition: all 0.3s;
+        }
+
+        /* Destaque para a linha atual (onde está digitando) */
+        .tile.current-row {
+            border-color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* Destaque para quando a letra é digitada */
+        .tile[data-state="active"] {
+            border-color: rgba(255, 255, 255, 1);
+            transform: scale(1.05);
+        }
+
+        /* Animação de virar a carta */
+        .tile.flip {
+            animation: flipTile 0.6s ease forwards;
+        }
+
+        @keyframes flipTile {
+            0% { transform: rotateX(0); }
+            50% { transform: rotateX(90deg); }
+            100% { transform: rotateX(0); }
+        }
+
+        /* Cores aplicadas via JS após a animação */
+        .tile.correct { background-color: #10b981 !important; border-color: #10b981 !important; }
+        .tile.present { background-color: #f59e0b !important; border-color: #f59e0b !important; }
+        .tile.absent { background-color: #4b5563 !important; border-color: #4b5563 !important; }
+
+        /* Teclado */
+        .keyboard {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 10px;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .keyboard-row {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .key {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-weight: 600;
+            border-radius: 6px;
+            padding: 15px 10px;
+            cursor: pointer;
+            user-select: none;
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .key:active { transform: scale(0.95); }
+        .key.large { flex: 1.5; font-size: 0.8rem; }
+        
+        .key.correct { background-color: #10b981; border-color: #10b981; }
+        .key.present { background-color: #f59e0b; border-color: #f59e0b; }
+        .key.absent { background-color: #4b5563; border-color: #4b5563; opacity: 0.5; }
+
+        /* Modal */
+        #modal { display: none; }
+        #modal.active { display: flex; }
+    </style>
+</head>
+<body class="text-white relative">
+
+    <!-- Cabeçalho e Dica -->
+    <header class="p-4 text-center mt-2">
+        <h1 class="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-gold to-yellow-200 mb-2 drop-shadow-md">
+            Nosso Termo 💖
+        </h1>
+        <div class="glass-card inline-block px-6 py-3 rounded-full mt-2 border border-brand-gold/50 shadow-[0_0_15px_rgba(251,191,36,0.3)]">
+            <span class="text-brand-gold font-bold mr-1">Dica:</span>
+            <span id="hint-text" class="text-sm md:text-base font-medium">Carregando...</span>
+        </div>
+    </header>
+
+    <!-- Área do Jogo -->
+    <main class="flex-grow flex flex-col justify-center items-center w-full px-4 mb-4">
+        
+        <!-- Indicador de Tentativas -->
+        <div id="attempts-indicator" class="text-sm font-semibold text-white/80 mb-3 tracking-wider uppercase">
+            Tentativa 1 de 6
+        </div>
+
+        <!-- O Grid será gerado via JS baseado no tamanho da palavra -->
+        <div id="board" class="board w-full max-w-xs md:max-w-sm"></div>
+    </main>
+
+    <!-- Teclado Virtual -->
+    <div id="keyboard" class="keyboard pb-6">
+        <div class="keyboard-row">
+            <button class="key" data-key="Q">Q</button>
+            <button class="key" data-key="W">W</button>
+            <button class="key" data-key="E">E</button>
+            <button class="key" data-key="R">R</button>
+            <button class="key" data-key="T">T</button>
+            <button class="key" data-key="Y">Y</button>
+            <button class="key" data-key="U">U</button>
+            <button class="key" data-key="I">I</button>
+            <button class="key" data-key="O">O</button>
+            <button class="key" data-key="P">P</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key" data-key="A">A</button>
+            <button class="key" data-key="S">S</button>
+            <button class="key" data-key="D">D</button>
+            <button class="key" data-key="F">F</button>
+            <button class="key" data-key="G">G</button>
+            <button class="key" data-key="H">H</button>
+            <button class="key" data-key="J">J</button>
+            <button class="key" data-key="K">K</button>
+            <button class="key" data-key="L">L</button>
+        </div>
+        <div class="keyboard-row">
+            <button class="key large" data-key="ENTER">ENVIAR</button>
+            <button class="key" data-key="Z">Z</button>
+            <button class="key" data-key="X">X</button>
+            <button class="key" data-key="C">C</button>
+            <button class="key" data-key="V">V</button>
+            <button class="key" data-key="B">B</button>
+            <button class="key" data-key="N">N</button>
+            <button class="key" data-key="M">M</button>
+            <button class="key large" data-key="BACKSPACE">⌫</button>
+        </div>
+    </div>
+
+    <!-- Modal de Resultado / Fim de Jogo -->
+    <div id="modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 items-center justify-center p-4">
+        <div class="glass-card p-8 rounded-3xl text-center max-w-sm w-full transform scale-100 transition-transform">
+            <div id="modal-icon" class="text-6xl mb-4">🎉</div>
+            <h2 id="modal-title" class="text-3xl font-bold text-brand-gold mb-2">Você acertou!</h2>
+            <p id="modal-msg" class="text-lg mb-6">Mandou bem, meu amor!</p>
+            <button id="modal-btn" onclick="nextLevel()" class="w-full bg-gradient-to-r from-brand-gold to-yellow-500 text-purple-900 font-extrabold text-lg py-3 rounded-full shadow-lg hover:scale-105 transition-transform">
+                Próxima Palavra ➔
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // CONFIGURAÇÃO DOS NÍVEIS
+        const levels = [
+            { word: "FAROL", hint: "Ponto turístico do nosso primeiro beijo." },
+            { word: "AZUL", hint: "A minha cor favorita no mundo." },
+            { word: "MILA", hint: "A dona do suvaco que eu tenho como guilty pleasure..." },
+            { word: "BAHIA", hint: "O time que tem que ganhar a Liberta!" },
+            { word: "ITALIA", hint: "O país que eu mais sonho em conhecer." }
+        ];
+
+        let currentLevel = 0;
+        let targetWord = "";
+        let maxGuesses = 6;
+        
+        let currentRow = 0;
+        let currentCol = 0;
+        let grid = [];
+        let isGameOver = false;
+        let isAnimating = false;
+
+        const boardElement = document.getElementById("board");
+        const hintElement = document.getElementById("hint-text");
+        const modal = document.getElementById("modal");
+        const attemptsIndicator = document.getElementById("attempts-indicator");
+
+        function initGame() {
+            targetWord = levels[currentLevel].word.toUpperCase();
+            hintElement.innerText = levels[currentLevel].hint;
+            
+            currentRow = 0;
+            currentCol = 0;
+            grid = [];
+            isGameOver = false;
+            
+            boardElement.style.gridTemplateColumns = `repeat(${targetWord.length}, 1fr)`;
+            boardElement.innerHTML = "";
+            
+            document.querySelectorAll(".key").forEach(key => {
+                key.classList.remove("correct", "present", "absent");
+            });
+
+            for (let r = 0; r < maxGuesses; r++) {
+                grid[r] = [];
+                for (let c = 0; c < targetWord.length; c++) {
+                    const tile = document.createElement("div");
+                    tile.classList.add("tile");
+                    tile.setAttribute("id", `tile-${r}-${c}`);
+                    boardElement.appendChild(tile);
+                    grid[r][c] = "";
+                }
+            }
+            updateGrid();
+        }
+
+        function handleInput(key) {
+            if (isGameOver || isAnimating) return;
+
+            if (key === "BACKSPACE" || key === "BACKSPACE") {
+                if (currentCol > 0) {
+                    currentCol--;
+                    grid[currentRow][currentCol] = "";
+                    updateGrid();
+                }
+                return;
+            }
+
+            if (key === "ENTER") {
+                if (currentCol === targetWord.length) {
+                    checkGuess();
+                } else {
+                    const rowTiles = getRowTiles();
+                    rowTiles.forEach(tile => {
+                        tile.animate([ { transform: "translateX(-5px)" }, { transform: "translateX(5px)" }, { transform: "translateX(0)" } ], { duration: 200 });
+                    });
+                }
+                return;
+            }
+
+            if (/^[A-Z]$/.test(key)) {
+                if (currentCol < targetWord.length) {
+                    grid[currentRow][currentCol] = key;
+                    currentCol++;
+                    updateGrid();
+                }
+            }
+        }
+
+        function updateGrid() {
+            attemptsIndicator.innerText = `Tentativa ${currentRow + 1} de ${maxGuesses}`;
+
+            for (let r = 0; r < maxGuesses; r++) {
+                for (let c = 0; c < targetWord.length; c++) {
+                    const tile = document.getElementById(`tile-${r}-${c}`);
+                    tile.innerText = grid[r][c];
+                    
+                    // Lógica para destacar visualmente a linha atual
+                    if (r === currentRow) {
+                        tile.classList.add("current-row");
+                        if (grid[r][c] !== "") {
+                            tile.setAttribute("data-state", "active");
+                        } else {
+                            tile.removeAttribute("data-state");
+                        }
+                    } else {
+                        tile.classList.remove("current-row");
+                        tile.removeAttribute("data-state");
+                    }
+                }
+            }
+        }
+
+        function getRowTiles() {
+            const tiles = [];
+            for (let c = 0; c < targetWord.length; c++) {
+                tiles.push(document.getElementById(`tile-${currentRow}-${c}`));
+            }
+            return tiles;
+        }
+
+        function checkGuess() {
+            const guess = grid[currentRow].join("");
+            const tiles = getRowTiles();
+            isAnimating = true;
+
+            let targetLetters = targetWord.split("");
+            let guessStates = Array(targetWord.length).fill("absent");
+
+            for (let i = 0; i < targetWord.length; i++) {
+                if (guess[i] === targetLetters[i]) {
+                    guessStates[i] = "correct";
+                    targetLetters[i] = null; 
+                }
+            }
+
+            for (let i = 0; i < targetWord.length; i++) {
+                if (guessStates[i] === "absent" && targetLetters.includes(guess[i])) {
+                    guessStates[i] = "present";
+                    targetLetters[targetLetters.indexOf(guess[i])] = null;
+                }
+            }
+
+            tiles.forEach((tile, index) => {
+                setTimeout(() => {
+                    tile.classList.add("flip");
+                    tile.classList.remove("current-row");
+                    
+                    setTimeout(() => {
+                        tile.classList.add(guessStates[index]);
+                        updateKeyboardColor(guess[index], guessStates[index]);
+                    }, 300);
+
+                    if (index === targetWord.length - 1) {
+                        setTimeout(() => {
+                            isAnimating = false;
+                            checkWinLoss(guess);
+                        }, 300);
+                    }
+                }, index * 250); 
+            });
+        }
+
+        function updateKeyboardColor(letter, state) {
+            const keyBtn = document.querySelector(`.key[data-key="${letter}"]`);
+            if (!keyBtn) return;
+            
+            if (keyBtn.classList.contains("correct")) return;
+            if (keyBtn.classList.contains("present") && state === "absent") return;
+            
+            keyBtn.classList.remove("correct", "present", "absent");
+            keyBtn.classList.add(state);
+        }
+
+        function checkWinLoss(guess) {
+            if (guess === targetWord) {
+                isGameOver = true;
+                fireConfetti();
+                setTimeout(() => showModal(true), 800);
+            } else if (currentRow === maxGuesses - 1) {
+                isGameOver = true;
+                setTimeout(() => showModal(false), 800);
+            } else {
+                currentRow++;
+                currentCol = 0;
+                updateGrid(); // Atualiza para acender a próxima linha
+            }
+        }
+
+        function showModal(won) {
+            const icon = document.getElementById("modal-icon");
+            const title = document.getElementById("modal-title");
+            const msg = document.getElementById("modal-msg");
+            const btn = document.getElementById("modal-btn");
+
+            if (won) {
+                icon.innerText = "🎉";
+                title.innerText = "Acertou!";
+                msg.innerText = "Você desvendou essa palavra. Nosso amor é forte mesmo!";
+            } else {
+                icon.innerText = "🥺";
+                title.innerText = "Poxa vida...";
+                msg.innerHTML = `A palavra era <b>${targetWord}</b>. Mas eu te amo igual!`;
+            }
+
+            if (currentLevel >= levels.length - 1) {
+                btn.innerText = "Finalizar Presente ❤️";
+                btn.onclick = () => {
+                    modal.classList.remove("active");
+                    alert("Você zerou o jogo! Feliz Aniversário de Namoro!"); 
+                };
+            } else {
+                btn.innerText = "Próxima Palavra ➔";
+                btn.onclick = () => nextLevel();
+            }
+
+            modal.classList.add("active");
+        }
+
+        function nextLevel() {
+            modal.classList.remove("active");
+            if (currentLevel < levels.length - 1) {
+                currentLevel++;
+                initGame();
+            }
+        }
+
+        function fireConfetti() {
+            var duration = 2 * 1000;
+            var animationEnd = Date.now() + duration;
+            var defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 60 };
+
+            var interval = setInterval(function() {
+                var timeLeft = animationEnd - Date.now();
+                if (timeLeft <= 0) return clearInterval(interval);
+                var particleCount = 50 * (timeLeft / duration);
+                confetti(Object.assign({}, defaults, { particleCount, origin: { x: Math.random(), y: Math.random() - 0.2 } }));
+            }, 250);
+        }
+
+        document.querySelectorAll(".key").forEach(btn => {
+            btn.addEventListener("click", (e) => {
+                const key = e.target.getAttribute("data-key");
+                handleInput(key);
+            });
+        });
+
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") handleInput("ENTER");
+            else if (e.key === "Backspace") handleInput("BACKSPACE");
+            else {
+                const letter = e.key.toUpperCase();
+                if (/^[A-Z]$/.test(letter)) handleInput(letter);
+            }
+        });
+
+        initGame();
+    </script>
+</body>
+</html>
